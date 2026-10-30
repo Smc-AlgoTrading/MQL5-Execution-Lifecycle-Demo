@@ -13,6 +13,8 @@ actually happened".
 MT5/Experts/MT5_ExecutionLifecycleDemo.mq5     609 lines total · 428 code · 2 classes · 16 methods
 ```
 
+**Download:** [release v1.0.0](https://github.com/Smc-AlgoTrading/MQL5-Execution-Lifecycle-Demo/releases/tag/v1.0.0) carries the compiled `.ex5` (42,024 bytes) plus the source, so the module can be attached to a chart without a compiler.
+
 ---
 
 ## Why this exists
@@ -108,7 +110,7 @@ MT5_ExecutionLifecycleDemo.ex5 — 42,024 bytes
 - no Strategy Tester run is claimed in this repository (the only initialised terminal on the build
   machine was an account with an open position, which was deliberately left alone);
 - no live or demo fill has been exercised with `InpDryRun=false` in this revision;
-- the latency column has therefore never been populated with real numbers — it will be, on the first
+- the release asset `.ex5` is the exact binary produced by the compile recorded above (same build, same session); the latency column has therefore never been populated with real numbers — it will be, on the first
   demo run, and that is the point of shipping the measurement instead of the claim.
 
 ## License
