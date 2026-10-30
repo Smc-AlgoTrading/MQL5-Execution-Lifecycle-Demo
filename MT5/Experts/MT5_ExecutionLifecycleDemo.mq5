@@ -274,6 +274,8 @@ private:
    datetime       m_send_time;
 
    string         m_phase;               // IDLE / SENT / DEAL_SEEN / REJECTED
+   datetime       m_last_dry_log;        // last dry-run audit row, for throttling
+   int            m_dry_log_seconds;     // throttle window (seconds): one dry-run row per hour
 
    //--- append one row; the file is never truncated, so a restart does not
    //--- destroy the audit trail of earlier sessions
@@ -323,6 +325,8 @@ public:
       m_request_id = 0; m_request_order = 0; m_request_deal = 0;
       m_send_us = 0; m_send_time = 0;
       m_phase = "IDLE";
+      m_last_dry_log = 0;
+      m_dry_log_seconds = 3600;
    }
 
    bool Init(const string symbol, const long magic, const int slippage_points, const string log_name)
@@ -432,12 +436,20 @@ public:
       if(dry_run)
       {
          m_phase = "DRYRUN";
+
+         // Nothing opens in dry run, so a naive log writes one row per bar (1,400 rows over three
+         // weeks of M15). The decision is unchanged; only the audit row is throttled to hourly.
+         if(m_last_dry_log > 0 && (TimeCurrent() - m_last_dry_log) < m_dry_log_seconds)
+            return(true);
+
          LogRow("dry_run_pass",
                 StringFormat("filling=%d sl=%.*f%s tp=%.*f%s margin=%.2f",
                              (int)filling,
                              c.digits, sl, (sl_moved ? "(clamped)" : ""),
-                             c.digits, tp, (tp_moved ? "(clamped)" : "")),
+                             c.digits, tp, (tp_moved ? "(clamped)" : ""),
+                             margin_needed),
                 volume, ref_price, -1);
+         m_last_dry_log = TimeCurrent();
          return(true);
       }
 

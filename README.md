@@ -13,7 +13,7 @@ actually happened".
 MT5/Experts/MT5_ExecutionLifecycleDemo.mq5     609 lines total · 428 code · 2 classes · 16 methods
 ```
 
-**Download:** [release v1.0.0](https://github.com/Smc-AlgoTrading/MQL5-Execution-Lifecycle-Demo/releases/tag/v1.0.0) carries the compiled `.ex5` (42,024 bytes) plus the source, so the module can be attached to a chart without a compiler.
+**Download:** [release v1.0.0](https://github.com/Smc-AlgoTrading/MQL5-Execution-Lifecycle-Demo/releases/tag/v1.0.0) carries the compiled `.ex5` plus the source, so the module can be attached to a chart without a compiler.
 
 ---
 
@@ -99,19 +99,62 @@ Inputs are grouped (`Execution`, `Protection`, `Demo trigger`, `Logging`). Every
 
 ## Verification — what was actually run, and what was not
 
-**Compiled:** MetaEditor64 CLI, Windows 11, terminal build 6090 data folder:
+### 1. Compiled
+
+MetaEditor64 CLI, Windows 11, MetaTrader 5 build 6090:
 
 ```
-Result: 0 errors, 0 warnings, 642 msec elapsed, cpu='X64 Regular'
-MT5_ExecutionLifecycleDemo.ex5 — 42,024 bytes
+Result: 0 errors, 0 warnings, 733 msec elapsed, cpu='X64 Regular'
+MT5_ExecutionLifecycleDemo.ex5 — 42,670 bytes
 ```
 
-**Not yet verified, stated plainly:**
-- no Strategy Tester run is claimed in this repository (the only initialised terminal on the build
-  machine was an account with an open position, which was deliberately left alone);
-- no live or demo fill has been exercised with `InpDryRun=false` in this revision;
-- the release asset `.ex5` is the exact binary produced by the compile recorded above (same build, same session); the latency column has therefore never been populated with real numbers — it will be, on the first
-  demo run, and that is the point of shipping the measurement instead of the claim.
+### 2. Strategy Tester (XAUUSD, M15, 2026.10.01 – 2026.10.20, 1-minute OHLC, Alpari-MT5-Demo, 10,000 USD)
+
+Contract as the terminal reported it: `digits=2 point=0.01 vol[0.01..100.00 step 0.01] stops=0pt freeze=0pt exec=2 filling_flags=3`
+(execution mode 2 = Market Execution, flags 3 = FOK|IOC → the resolver picked **FOK**).
+
+**Dry run (`InpDryRun=true`)** — 299 audit rows, one per hour by design:
+
+| measured | value |
+|---|---|
+| entries that passed every gate | 299 (no rejections) |
+| filling mode resolved | FOK (`filling=0`) |
+| volume normalised | 0.10 on a 0.01 step grid |
+| margin reported by `OrderCalcMargin` | 415.27 – 415.96 USD per 0.10 lot |
+| stop distances | exactly 300 / 600 points (3.00 / 6.00 on gold) |
+| stops clamped | never — this broker reports `stops=0 freeze=0`, so the clamp path was not exercised |
+
+**Live send path in the tester (`InpDryRun=false`)** — 2,871 audit rows:
+
+| measured | value |
+|---|---|
+| entries accepted | **716**, every one `retcode=10009` (`TRADE_RETCODE_DONE`) |
+| exits recorded | 715 |
+| rejections | **8 × `retcode=10018` (market closed)** — logged, guard released, no cascade, no duplicate order |
+| duplicate intents | 0 (one request in flight at a time, released only by the transaction event) |
+| distinct orders / deals | 716 / 1,431 |
+| `terminal_observed_ms`, entries | min 0.2 · median 0.2 · p95 0.4 · max 0.7 |
+| `terminal_observed_ms`, exits | min 0.2 · median 0.8 · p95 1.1 · max 2.0 |
+
+> **These latency numbers are not execution latency.** Inside the Strategy Tester the deal is generated
+> by the same simulated tick, so the column measures the terminal's event dispatch (sub-millisecond),
+> not network or server matching time. They are published as evidence that the measurement path works
+> and that the state machine resolves in the right order — not as a speed claim. Real numbers require a
+> demo account with live pricing.
+
+### 3. Two defects this run exposed (now fixed)
+
+- the dry-run log line passed 7 arguments to 8 format specifiers, so `margin` printed as `0.00`; the
+  value was always computed, only the row was wrong;
+- in dry run nothing ever opens, so an unthrottled audit wrote one row per bar (≈1,400 rows over three
+  weeks of M15). The decision is unchanged; the audit row is now throttled to one per hour.
+
+### 4. Still not verified
+
+- real demo/live fill latency (see the note above);
+- the stop-clamping branch, untested because this broker advertises `stops=0 / freeze=0` — a broker
+  with a non-zero stops level is needed;
+- partial fills (`TRADE_RETCODE_DONE_PARTIAL`), not produced by this symbol/market.
 
 ## License
 
